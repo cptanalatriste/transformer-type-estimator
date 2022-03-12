@@ -19,7 +19,7 @@ def main(csv_file: str = "data/survivor_responses.csv"):
     training_csv_file: str = "training_data.csv"
     testing_csv_file: str = "testing_data.csv"
 
-    training_dataframe, testing_dataframe = train_test_split(original_dataframe, test_size=0.5)
+    training_dataframe, testing_dataframe = train_test_split(original_dataframe, test_size=test_size)
     training_dataframe.to_csv(training_csv_file, index=False)
     testing_dataframe.to_csv(testing_csv_file, index=False)
 

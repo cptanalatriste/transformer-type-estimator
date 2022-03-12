@@ -3,7 +3,8 @@ from typing import Optional
 
 import pandas as pd
 from keras import Model
-from transformers import AutoTokenizer, BertTokenizerFast, TFAutoModelForSequenceClassification, DataCollatorWithPadding
+from transformers import AutoTokenizer, BertTokenizerFast, TFAutoModelForSequenceClassification, \
+    DataCollatorWithPadding, PushToHubCallback
 from datasets import Dataset, DatasetDict
 import tensorflow as tf
 
@@ -15,6 +16,8 @@ class TransformerTypeAnalyser(object):
         self.text_column: str = "text"
         self.label_column: str = "will_help"
         self.irrelevant_columns = ["tweet_id", "wont_help"]
+        self.hub_model_id: str = "cptanalatriste/request-for-help"
+
         self.num_labels: int = 2
         self.batch_size: int = 32
         self.learning_rate: float = 3e-5
@@ -47,7 +50,7 @@ class TransformerTypeAnalyser(object):
 
         return tensorflow_dataset
 
-    def train(self, training_data_file: str, testing_data_file: str) -> str:
+    def train(self, training_data_file: str, testing_data_file: str):
         dataset_dict: DatasetDict = DatasetDict({
             "train": self.convert_csv_to_dataset(training_data_file),
             "test": self.convert_csv_to_dataset(testing_data_file)
@@ -62,7 +65,12 @@ class TransformerTypeAnalyser(object):
 
         logging.info(f"Encoding finished!")
 
-        self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs)
+        push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir="./model",
+                                                                    tokenizer=self.tokenizer,
+                                                                    hub_model_id=self.hub_model_id)
+
+        self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs,
+                       callbacks=push_to_hub_callback)
 
     def obtain_probabilities(self, text_as_string: str) -> float:
         pass
