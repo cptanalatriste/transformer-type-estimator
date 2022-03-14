@@ -24,6 +24,7 @@ class TransformerTypeAnalyser(object):
         self.irrelevant_columns = ["tweet_id", "wont_help"]
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
+        self.output_directory: str = "./model"
 
         self.num_labels: int = 2
         self.batch_size: int = 32
@@ -75,7 +76,7 @@ class TransformerTypeAnalyser(object):
 
         logging.info(f"Encoding finished!")
 
-        push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir="./model",
+        push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir=self.output_directory,
                                                                     tokenizer=self.tokenizer,
                                                                     hub_model_id=self.hub_model_id)
 
@@ -84,8 +85,16 @@ class TransformerTypeAnalyser(object):
 
         logging.info(f"Training finished! Model is available at the hub with id {self.hub_model_id}")
 
-    def obtain_probabilities(self, text_as_string: str) -> float:
-        classification_pipeline: Pipeline = pipeline(self.pipeline_task, self.hub_model_id)
+    def obtain_probabilities(self, text_as_string: str, local=False) -> float:
+        classification_pipeline: Pipeline
+        if local:
+            logging.info(f"Loading model from {self.output_directory}")
+            classification_pipeline = pipeline(task=self.pipeline_task,
+                                               model=self.output_directory,
+                                               tokenizer=self.output_directory)
+        else:
+            classification_pipeline = pipeline(task=self.pipeline_task, model=self.hub_model_id)
+
         predictions: List[List[Dict]] = classification_pipeline(text_as_string, return_all_scores=True)
 
         group_identity_probability: float = [entry["score"] for entry in predictions[0]
@@ -103,10 +112,10 @@ def start_training(training_csv: str, testing_csv_file: str) -> None:
     type_analyser.train(training_csv, testing_csv_file)
 
 
-def obtain_probabilities(input_text: str):
+def obtain_probabilities(input_text: str, local: bool):
     logging.basicConfig(level=logging.DEBUG)
     type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser()
-    prediction: float = type_analyser.obtain_probabilities(input_text)
+    prediction: float = type_analyser.obtain_probabilities(input_text, local)
     print(prediction)
 
 
@@ -119,14 +128,17 @@ def main():
     parser.add_argument("--test_csv", type=str, help="CSV file with testing data.")
     parser.add_argument("--input_text", type=str, help="Input text, for probability calculation.")
     parser.add_argument("--train", action="store_true", help="Start fine-tuning the pre-trained transformer model.")
-    parser.add_argument("--pred", action="store_true", help="Calculate the probability for helping given a text.")
-
+    parser.add_argument("--pred", action="store_true", help="Calculate the probability for helping given a text"
+                                                            " using a remote model.")
+    parser.add_argument("--predlocal", action="store_true", help="Calculate the probability for helping given a text"
+                                                                 " using a local model.")
     arguments = parser.parse_args()
     if arguments.train:
         start_training(arguments.train_csv, arguments.test_csv)
-
-    if arguments.pred:
-        obtain_probabilities(arguments.input_text)
+    elif arguments.pred:
+        obtain_probabilities(arguments.input_text, local=False)
+    elif arguments.predlocal:
+        obtain_probabilities(arguments.input_text, local=True)
 
 
 if __name__ == "__main__":

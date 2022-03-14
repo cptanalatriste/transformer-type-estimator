@@ -11,7 +11,7 @@ SEED: int = 0
 
 def predict(tweet_to_predict: str):
     type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser()
-    prediction: float = type_analyser.obtain_probabilities(tweet_to_predict)
+    prediction: float = type_analyser.obtain_probabilities(tweet_to_predict, local=True)
     print(tweet_to_predict, prediction)
 
 
