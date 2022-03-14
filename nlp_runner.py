@@ -4,15 +4,23 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from analyser import TransformerTypeAnalyser
+from transformer_analyser import TransformerTypeAnalyser
 
 SEED: int = 0
 
 
-def main(csv_file: str = "data/survivor_responses.csv"):
+def predict(tweet_to_predict: str):
+    type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser()
+    prediction: float = type_analyser.obtain_probabilities(tweet_to_predict)
+    print(tweet_to_predict, prediction)
+
+
+def train(csv_file: str = "data/survivor_responses.csv"):
     np.random.seed(SEED)
 
     original_dataframe: pd.DataFrame = pd.read_csv(csv_file)
+    original_dataframe["will_help"] = original_dataframe["will_help"].astype(int)
+
     training_dataframe: pd.DataFrame
     testing_dataframe: pd.DataFrame
     test_size: float = 0.5
@@ -29,4 +37,6 @@ def main(csv_file: str = "data/survivor_responses.csv"):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    main()
+    # train()
+    predict("Sure! I'll help")
+    predict("Sorry, I can't")

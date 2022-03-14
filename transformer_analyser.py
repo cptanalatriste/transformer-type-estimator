@@ -38,7 +38,6 @@ class TransformerTypeAnalyser(object):
 
     def convert_csv_to_dataset(self, csv_file: str) -> Dataset:
         dataframe: pd.DataFrame = pd.read_csv(csv_file)
-        dataframe[self.label_column] = dataframe[self.label_column].astype(int)
         dataset: Dataset = Dataset.from_pandas(dataframe)
 
         return dataset
