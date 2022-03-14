@@ -36,7 +36,8 @@ class TransformerTypeAnalyser(object):
     def tokenize(self, data_batch):
         return self.tokenizer(data_batch[self.text_column], truncation=True, max_length=128)
 
-    def convert_csv_to_dataset(self, csv_file: str) -> Dataset:
+    @staticmethod
+    def convert_csv_to_dataset(csv_file: str) -> Dataset:
         dataframe: pd.DataFrame = pd.read_csv(csv_file)
         dataset: Dataset = Dataset.from_pandas(dataframe)
 
