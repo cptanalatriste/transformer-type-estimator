@@ -1,16 +1,22 @@
+from keras.callbacks import EarlyStopping
+
+SEED: int = 42
+import numpy as np
+
+np.random.seed(SEED)
+import tensorflow as tf
+
+tf.random.set_seed(SEED)
+
 import logging
 from argparse import ArgumentParser
 from typing import Optional, List, Dict
 
-import numpy as np
 import pandas as pd
-import tensorflow as tf
 from datasets import Dataset, DatasetDict
 from keras import Model
 from transformers import AutoTokenizer, BertTokenizerFast, TFAutoModelForSequenceClassification, \
     DataCollatorWithPadding, PushToHubCallback, pipeline, Pipeline
-
-SEED: int = 0
 
 GROUP_IDENTITY_CLASS: str = "LABEL_1"
 TEXT_CONTENT_COLUMN = "text"
@@ -25,6 +31,7 @@ class TransformerTypeAnalyser(object):
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
         self.output_directory: str = "./model"
+        self.early_stopping_patience: int = 10
 
         self.num_labels: int = 2
         self.batch_size: int = 32
@@ -67,7 +74,7 @@ class TransformerTypeAnalyser(object):
             "test": self.convert_csv_to_dataset(testing_data_file)
         })
 
-        logging.info("Encoding content for tweets")
+        logging.info("Encoding text ...")
         encoded_datasets: DatasetDict = dataset_dict.map(self.tokenize, batched=True)
         encoded_datasets = encoded_datasets.remove_columns(NON_ESSENTIAL_COLUMNS)
 
@@ -76,8 +83,13 @@ class TransformerTypeAnalyser(object):
 
         logging.info(f"Encoding finished!")
 
+        early_stopping_callback: EarlyStopping = EarlyStopping(monitor='val_loss',
+                                                               patience=self.early_stopping_patience,
+                                                               restore_best_weights=True)
+
         if local:
-            self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs)
+            self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs,
+                           callbacks=[early_stopping_callback])
             self.model.save_pretrained(self.output_directory)
         else:
             push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir=self.output_directory,
@@ -85,7 +97,7 @@ class TransformerTypeAnalyser(object):
                                                                         hub_model_id=self.hub_model_id)
 
             self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs,
-                           callbacks=push_to_hub_callback)
+                           callbacks=[early_stopping_callback, push_to_hub_callback])
 
             logging.info(f"Training finished! Model is available at the hub with id {self.hub_model_id}")
 
@@ -126,8 +138,6 @@ def obtain_probabilities(input_text: str, local: bool):
 
 
 def main():
-    np.random.seed(SEED)
-
     parser: ArgumentParser = ArgumentParser(
         description="A transformer-based intent recognition for answers to help requests.")
     parser.add_argument("--train_csv", type=str, help="CSV file with training data.")
