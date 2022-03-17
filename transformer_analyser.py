@@ -31,12 +31,12 @@ class TransformerTypeAnalyser(object):
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
         self.output_directory: str = "./model"
-        self.early_stopping_patience: int = 10
 
         self.num_labels: int = 2
         self.batch_size: int = 32
         self.learning_rate: float = 3e-5
         self.epochs = 65
+        self.early_stopping_patience: int = int(self.epochs / 3)
 
         self.tokenizer: Optional[BertTokenizerFast] = None
         self.model: Optional[Model] = None
@@ -66,8 +66,8 @@ class TransformerTypeAnalyser(object):
         self.model = TFAutoModelForSequenceClassification.from_pretrained(self.model_checkpoint,
                                                                           num_labels=self.num_labels)
         self.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate),
-                           loss="binary_crossentropy",
-                           metrics=["accuracy"])
+                           loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                           metrics=tf.metrics.SparseCategoricalAccuracy())
 
         dataset_dict: DatasetDict = DatasetDict({
             "train": self.convert_csv_to_dataset(training_data_file),
@@ -85,6 +85,7 @@ class TransformerTypeAnalyser(object):
 
         early_stopping_callback: EarlyStopping = EarlyStopping(monitor='val_loss',
                                                                patience=self.early_stopping_patience,
+                                                               verbose=True,
                                                                restore_best_weights=True)
 
         if local:
@@ -101,7 +102,8 @@ class TransformerTypeAnalyser(object):
 
             logging.info(f"Training finished! Model is available at the hub with id {self.hub_model_id}")
 
-        logging.info(f"Model saved at {self.output_directory}")
+        self.tokenizer.save_pretrained(self.output_directory)
+        logging.info(f"Model and Tokenizer saved at {self.output_directory}")
 
     def obtain_probabilities(self, text_as_string: str, local=False) -> float:
         classification_pipeline: Pipeline
@@ -109,7 +111,7 @@ class TransformerTypeAnalyser(object):
             logging.info(f"Loading model from {self.output_directory}")
             classification_pipeline = pipeline(task=self.pipeline_task,
                                                model=self.output_directory,
-                                               tokenizer=self.tokenizer)
+                                               tokenizer=self.output_directory)
         else:
             classification_pipeline = pipeline(task=self.pipeline_task, model=self.hub_model_id)
 
