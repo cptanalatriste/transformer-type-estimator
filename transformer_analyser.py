@@ -1,12 +1,23 @@
-from keras.callbacks import EarlyStopping
+import os
+
+from torch import Tensor
 
 SEED: int = 42
 import numpy as np
 
 np.random.seed(SEED)
+
 import tensorflow as tf
 
 tf.random.set_seed(SEED)
+# physical_devices = tf.config.list_physical_devices("GPU")
+# for device in physical_devices:
+#     tf.config.experimental.set_memory_growth(device, True)
+# config = tf.compat.v1.ConfigProto()
+# config.gpu_options.allow_growth = True
+# session = tf.compat.v1.Session(config=config)
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+
 
 import logging
 from argparse import ArgumentParser
@@ -14,9 +25,10 @@ from typing import Optional, List, Dict
 
 import pandas as pd
 from datasets import Dataset, DatasetDict
-from keras import Model
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras import Model
 from transformers import AutoTokenizer, BertTokenizerFast, TFAutoModelForSequenceClassification, \
-    DataCollatorWithPadding, PushToHubCallback, pipeline, Pipeline
+    DataCollatorWithPadding, pipeline, Pipeline
 
 GROUP_IDENTITY_CLASS: str = "LABEL_1"
 TEXT_CONTENT_COLUMN = "text"
@@ -31,6 +43,7 @@ class TransformerTypeAnalyser(object):
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
         self.output_directory: str = "./model"
+        self.model_input_names: List[str] = ['input_ids', 'token_type_ids', 'attention_mask']
 
         self.num_labels: int = 2
         self.batch_size: int = 32
@@ -42,7 +55,7 @@ class TransformerTypeAnalyser(object):
         self.model: Optional[Model] = None
 
     def tokenize(self, data_batch):
-        return self.tokenizer(data_batch[TEXT_CONTENT_COLUMN], truncation=True, max_length=128)
+        return self.tokenizer(data_batch[TEXT_CONTENT_COLUMN], truncation=True, padding="max_length")
 
     @staticmethod
     def convert_csv_to_dataset(csv_file: str) -> Dataset:
@@ -51,15 +64,19 @@ class TransformerTypeAnalyser(object):
 
         return dataset
 
-    def convert_dataset_to_tensorflow(self, dataset: Dataset, shuffle: bool) -> tf.data.Dataset:
-        data_collator: DataCollatorWithPadding = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="tf")
-        tensorflow_dataset: tf.data.Dataset = dataset.to_tf_dataset(columns=self.tokenizer.model_input_names,
-                                                                    label_cols=[TEXT_LABEL_COLUMN],
-                                                                    shuffle=shuffle,
-                                                                    batch_size=self.batch_size,
-                                                                    collate_fn=data_collator)
+    def convert_dataset_to_tensorflow(self, encoded_datasets: Dataset, shuffle: bool) -> tf.data.Dataset:
+        tensorflow_dataset: Dataset = encoded_datasets.remove_columns([TEXT_CONTENT_COLUMN]).with_format("tensorflow")
 
-        return tensorflow_dataset
+        features: Dict[str, Tensor] = {input_name: tensorflow_dataset[input_name]
+                                       for input_name in self.model_input_names}
+        result_dataset: tf.data.Dataset = tf.data.Dataset.from_tensor_slices(
+            (features, tensorflow_dataset[TEXT_LABEL_COLUMN]))
+        if shuffle:
+            result_dataset = result_dataset.shuffle(len(tensorflow_dataset)).batch(self.batch_size)
+        else:
+            result_dataset = result_dataset.batch(self.batch_size)
+
+        return result_dataset
 
     def train(self, training_data_file: str, testing_data_file: str, local=False):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
@@ -93,14 +110,15 @@ class TransformerTypeAnalyser(object):
                            callbacks=[early_stopping_callback])
             self.model.save_pretrained(self.output_directory)
         else:
-            push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir=self.output_directory,
-                                                                        tokenizer=self.tokenizer,
-                                                                        hub_model_id=self.hub_model_id)
-
-            self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs,
-                           callbacks=[early_stopping_callback, push_to_hub_callback])
-
-            logging.info(f"Training finished! Model is available at the hub with id {self.hub_model_id}")
+            # push_to_hub_callback: PushToHubCallback = PushToHubCallback(output_dir=self.output_directory,
+            #                                                             tokenizer=self.tokenizer,
+            #                                                             hub_model_id=self.hub_model_id)
+            #
+            # self.model.fit(training_dataset, validation_data=testing_dataset, epochs=self.epochs,
+            #                callbacks=[early_stopping_callback, push_to_hub_callback])
+            #
+            # logging.info(f"Training finished! Model is available at the hub with id {self.hub_model_id}")
+            pass
 
         self.tokenizer.save_pretrained(self.output_directory)
         logging.info(f"Model and Tokenizer saved at {self.output_directory}")
