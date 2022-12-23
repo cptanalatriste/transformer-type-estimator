@@ -28,7 +28,8 @@ NON_ESSENTIAL_COLUMNS = ["title", "URL", "starting_time", "context", "logged_by"
 
 class TransformerTypeAnalyser(object):
 
-    def __init__(self, epochs: int = 65, batch_size: int = 32):
+    def __init__(self, epochs: int = 65, batch_size: int = 32,
+                 learning_rate: float = 3e-5):
         self.model_checkpoint: str = "bert-base-uncased"
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
@@ -39,7 +40,7 @@ class TransformerTypeAnalyser(object):
 
         self.num_labels: int = 2
         self.batch_size: int = batch_size
-        self.learning_rate: float = 3e-5
+        self.learning_rate: float = learning_rate
         self.epochs = epochs
         self.early_stopping_patience: int = int(self.epochs / 3)
 
