@@ -28,7 +28,7 @@ NON_ESSENTIAL_COLUMNS = ["title", "URL", "starting_time", "context", "logged_by"
 
 class TransformerTypeAnalyser(object):
 
-    def __init__(self, epochs=65):
+    def __init__(self, epochs: int = 65, batch_size: int = 32):
         self.model_checkpoint: str = "bert-base-uncased"
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
@@ -38,7 +38,7 @@ class TransformerTypeAnalyser(object):
         self.model_input_names: List[str] = ['input_ids', 'token_type_ids', 'attention_mask']
 
         self.num_labels: int = 2
-        self.batch_size: int = 32
+        self.batch_size: int = batch_size
         self.learning_rate: float = 3e-5
         self.epochs = epochs
         self.early_stopping_patience: int = int(self.epochs / 3)
@@ -79,7 +79,7 @@ class TransformerTypeAnalyser(object):
         dataset_dict_input: Dict[str, Dataset] = {
             "train": Dataset.from_pandas(training_data)
         }
-        if testing_data:
+        if testing_data is not None:
             dataset_dict_input["test"] = Dataset.from_pandas(testing_data)
         dataset_dict: DatasetDict = DatasetDict(dataset_dict_input)
 
@@ -90,7 +90,7 @@ class TransformerTypeAnalyser(object):
         training_dataset: tf.data.Dataset = self.convert_dataset_to_tensorflow(encoded_datasets["train"], shuffle=True)
         testing_dataset: Optional[tf.data.Dataset] = None
 
-        logging.info(f"Encoding finished!")
+        logging.info(f"Encoding finished. Starting training")
         training_callbacks: List[Callback] = [TensorBoard(log_dir=get_log_directory(self.log_directory))]
 
         if "test" in encoded_datasets:
