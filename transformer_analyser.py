@@ -11,7 +11,7 @@ tf.random.set_seed(SEED)
 
 import logging
 from argparse import ArgumentParser
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 import pandas as pd
 from datasets import Dataset, DatasetDict
@@ -110,7 +110,7 @@ class TransformerTypeAnalyser(object):
         self.tokenizer.save_pretrained(self.output_directory)
         logging.info(f"Model and Tokenizer saved at {self.output_directory}")
 
-    def obtain_probabilities(self, text_as_string: str, local=False) -> float:
+    def obtain_probabilities(self, text_data: Union[str, List[str]], local=False) -> List[float]:
         classification_pipeline: Pipeline
         if local:
             logging.info(f"Loading model from {self.output_directory}")
@@ -120,16 +120,24 @@ class TransformerTypeAnalyser(object):
         else:
             classification_pipeline = pipeline(task=self.pipeline_task, model=self.hub_model_id)
 
-        predictions: List[List[Dict]] = classification_pipeline(text_as_string, return_all_scores=True)
+        predictions: List[List[Dict]] = classification_pipeline(text_data, return_all_scores=True)
 
-        group_identity_probability: float = [entry["score"] for entry in predictions[0]
-                                             if entry["label"] == GROUP_IDENTITY_CLASS][0]
+        group_identity_probabilities: List[float] = [extract_group_probability(prediction_items) for prediction_items in
+                                                     predictions]
 
-        return group_identity_probability
+        return group_identity_probabilities
 
 
 def get_log_directory(base_directory: str = "logs/") -> str:
     return base_directory + datetime.datetime.now().strftime("run_%Y_%m_%d_%H_%M_%S")
+
+
+def extract_group_probability(prediction_items: List[Dict[str, Any]]) -> Optional[float]:
+    for prediction_item in prediction_items:
+        if prediction_item["label"] == GROUP_IDENTITY_CLASS:
+            return prediction_item["score"]
+
+    return None
 
 
 def start_training(training_csv: str, testing_csv_file: str) -> None:
@@ -144,8 +152,8 @@ def start_training(training_csv: str, testing_csv_file: str) -> None:
 def obtain_probabilities(input_text: str, local: bool):
     logging.basicConfig(level=logging.DEBUG)
     type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser()
-    prediction: float = type_analyser.obtain_probabilities(input_text, local)
-    print(prediction)
+    prediction: List[float] = type_analyser.obtain_probabilities(input_text, local)
+    print(prediction[0])
 
 
 def main():
