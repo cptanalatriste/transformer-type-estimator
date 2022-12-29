@@ -1,4 +1,5 @@
 import logging
+import pickle
 from typing import List, Optional, Union
 
 import numpy as np
@@ -12,9 +13,14 @@ from transformer_analyser import TransformerTypeAnalyser
 
 class CalibratedTypeEstimator:
 
-    def __init__(self, original_type_estimator: TransformerTypeAnalyser, method: str):
+    def __init__(self, original_type_estimator: TransformerTypeAnalyser, method: str,
+                 save_file: Optional[str] = None):
         self.original_type_estimator: TransformerTypeAnalyser = original_type_estimator
         self.calibrator: Optional[Union[IsotonicRegression, LinearRegression]] = None
+        if save_file is not None:
+            self.calibrator = pickle.load(open(save_file, "rb"))
+            logging.info(f"Calibrator loaded from {save_file}")
+
         self.method: str = method
 
     def calibrate(self, expressions: List[str], true_labels: List[int], number_of_bins: int) -> None:
@@ -35,6 +41,10 @@ class CalibratedTypeEstimator:
             self.calibrator.fit(bin_predicted_probabilities.reshape(-1, 1),
                                 bin_true_probabilities.reshape(-1, 1))
             logging.info("Linear regression fitted.")
+
+        save_file: str = f"model/{self.method}_calibrator.sav"
+        pickle.dump(self.calibrator, open(save_file, "wb"))
+        logging.info(f"Calibrator model saved at {save_file}")
 
     def obtain_probabilities(self, expressions: List[str]) -> List[float]:
         original_probabilities: List[float] = self.original_type_estimator.obtain_probabilities(expressions,
