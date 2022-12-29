@@ -77,16 +77,16 @@ def plot_reliability_diagram(true_labels: List[int], positive_probabilities: Lis
 
 def calculate_ece_from_calibration_curve(bin_true_probability: np.ndarray, bin_predicted_probability: np.ndarray,
                                          person_type_probabilities: np.ndarray) -> float:
-    number_of_bins = len(bin_true_probability)  # type: int
+    number_of_bins: int = len(bin_true_probability)
     histogram = np.histogram(a=person_type_probabilities, range=(0, 1), bins=number_of_bins)
     bin_sizes = histogram[0]
-    result = 0.0  # type: float
+    result: float = 0.0
 
-    total_samples = float(sum(bin_sizes))  # type: float
+    total_samples: float = float(sum(bin_sizes))
     for bin_index in np.arange(len(bin_sizes)):
-        current_bin_size = bin_sizes[bin_index]  # type: int
-        true_probability = bin_true_probability[bin_index]  # type: float
-        predicted_probability = bin_predicted_probability[bin_index]  # type: float
+        current_bin_size: int = bin_sizes[bin_index]
+        true_probability: float = bin_true_probability[bin_index]
+        predicted_probability: float = bin_predicted_probability[bin_index]
 
         result += current_bin_size / total_samples * np.abs(true_probability - predicted_probability)
 

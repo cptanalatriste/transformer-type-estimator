@@ -23,3 +23,13 @@ tensorboard --logdir=./logs --reload_multifile True
 ```
 
 Then, open your browser at http://localhost:6006/ to see the Dashboard.
+
+## Updating dependencies
+
+When adding new libraries to the project, make your you keep `environment.yml`
+updated. 
+To accomplish this, please run the following:
+
+```bash
+conda env export > environment.yml
+```
