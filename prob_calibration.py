@@ -1,19 +1,21 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LinearRegression
 
 from transformer_analyser import TransformerTypeAnalyser
 
 
 class CalibratedTypeEstimator:
 
-    def __init__(self, original_type_estimator: TransformerTypeAnalyser):
+    def __init__(self, original_type_estimator: TransformerTypeAnalyser, method: str):
         self.original_type_estimator: TransformerTypeAnalyser = original_type_estimator
-        self.isotonic_calibrator: Optional[IsotonicRegression] = None
+        self.calibrator: Optional[Union[IsotonicRegression, LinearRegression]] = None
+        self.method: str = method
 
     def calibrate(self, expressions: List[str], true_labels: List[int], number_of_bins: int) -> None:
         positive_probabilities: List[float] = self.original_type_estimator.obtain_probabilities(expressions,
@@ -21,19 +23,45 @@ class CalibratedTypeEstimator:
         bin_true_probabilities, bin_predicted_probabilities = calibration_curve(true_labels, positive_probabilities,
                                                                                 n_bins=number_of_bins)
 
-        self.isotonic_calibrator = IsotonicRegression(out_of_bounds="clip")
-        self.isotonic_calibrator.fit(bin_predicted_probabilities, bin_true_probabilities)
-        logging.info("Isotonic Regression fitted.")
+        if "isotonic" == self.method:
+            self.calibrator = IsotonicRegression(out_of_bounds="clip")
+            self.calibrator.fit(bin_predicted_probabilities, bin_true_probabilities)
+            logging.info("Isotonic Regression fitted.")
+        elif "sigmoid" == self.method:
+            bin_true_probabilities, bin_predicted_probabilities = filter_out_of_domain(bin_predicted_probabilities,
+                                                                                       bin_true_probabilities)
+            bin_true_probabilities: np.ndarray = np.log(bin_true_probabilities / (1 - bin_true_probabilities))
+            self.calibrator = LinearRegression()
+            self.calibrator.fit(bin_predicted_probabilities.reshape(-1, 1),
+                                bin_true_probabilities.reshape(-1, 1))
+            logging.info("Linear regression fitted.")
 
     def obtain_probabilities(self, expressions: List[str]) -> List[float]:
         original_probabilities: List[float] = self.original_type_estimator.obtain_probabilities(expressions,
                                                                                                 local=True)
-        return self.isotonic_calibrator.predict(original_probabilities)
+
+        if "isotonic" == self.method:
+            return self.calibrator.predict(original_probabilities)
+        elif "sigmoid" == self.method:
+            probabilities_as_array: np.ndarray = np.array(original_probabilities)
+            return 1 / (1 + np.exp(-self.calibrator.predict(probabilities_as_array.reshape(-1, 1)).flatten()))
+
+
+def filter_out_of_domain(predicted_probabilities, true_probabilities) -> np.ndarray:
+    filtered = list(zip(*[probability
+                          for probability in zip(predicted_probabilities, true_probabilities)
+                          if 0 < probability[1] < 1]))
+    return np.array(filtered)
 
 
 def plot_reliability_diagram(true_labels: List[int], positive_probabilities: List[float], number_of_bins: int):
     bin_true_probabilities, bin_predicted_probabilities = calibration_curve(true_labels, positive_probabilities,
                                                                             n_bins=number_of_bins)
+    expected_calibration_error: float = calculate_ece_from_calibration_curve(bin_true_probabilities,
+                                                                             bin_predicted_probabilities,
+                                                                             positive_probabilities)
+    logging.info(
+        f"Expected Calibration Error {expected_calibration_error}")
     plt.hist(positive_probabilities,
              weights=np.ones_like(positive_probabilities) / len(positive_probabilities),
              alpha=.4, bins=np.maximum(10, number_of_bins))
@@ -45,3 +73,21 @@ def plot_reliability_diagram(true_labels: List[int], positive_probabilities: Lis
     plt.grid(True, color="#B2C7D9")
 
     plt.show()
+
+
+def calculate_ece_from_calibration_curve(bin_true_probability: np.ndarray, bin_predicted_probability: np.ndarray,
+                                         person_type_probabilities: np.ndarray) -> float:
+    number_of_bins = len(bin_true_probability)  # type: int
+    histogram = np.histogram(a=person_type_probabilities, range=(0, 1), bins=number_of_bins)
+    bin_sizes = histogram[0]
+    result = 0.0  # type: float
+
+    total_samples = float(sum(bin_sizes))  # type: float
+    for bin_index in np.arange(len(bin_sizes)):
+        current_bin_size = bin_sizes[bin_index]  # type: int
+        true_probability = bin_true_probability[bin_index]  # type: float
+        predicted_probability = bin_predicted_probability[bin_index]  # type: float
+
+        result += current_bin_size / total_samples * np.abs(true_probability - predicted_probability)
+
+    return result
