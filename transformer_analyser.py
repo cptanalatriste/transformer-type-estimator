@@ -10,7 +10,7 @@ import tensorflow as tf
 tf.random.set_seed(SEED)
 
 import logging
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from typing import Optional, List, Dict, Any, Union
 
 import pandas as pd
@@ -28,12 +28,12 @@ NON_ESSENTIAL_COLUMNS = ["title", "URL", "starting_time", "context", "logged_by"
 
 class TransformerTypeAnalyser(object):
 
-    def __init__(self, epochs: int = 65, batch_size: int = 32,
-                 learning_rate: float = 3e-5):
+    def __init__(self, epochs: int = 65, batch_size: int = 32, learning_rate: float = 3e-5,
+                 output_directory: str = "./model"):
         self.model_checkpoint: str = "bert-base-uncased"
         self.hub_model_id: str = "cptanalatriste/request-for-help"
         self.pipeline_task: str = "text-classification"
-        self.output_directory: str = "./model"
+        self.output_directory: str = output_directory
         self.log_directory: str = "logs/"
 
         self.model_input_names: List[str] = ['input_ids', 'token_type_ids', 'attention_mask']
@@ -149,9 +149,9 @@ def start_training(training_csv: str, testing_csv_file: str) -> None:
     type_analyser.train_from_files(training_csv, testing_csv_file)
 
 
-def obtain_probabilities(input_text: str, local: bool):
+def obtain_probabilities(input_text: str, local: bool, output_directory: str = "./model"):
     logging.basicConfig(level=logging.DEBUG)
-    type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser()
+    type_analyser: TransformerTypeAnalyser = TransformerTypeAnalyser(output_directory=output_directory)
     prediction: List[float] = type_analyser.obtain_probabilities(input_text, local)
     print(prediction[0])
 
@@ -170,15 +170,18 @@ def main():
                                                             " using a remote model.")
     parser.add_argument("--predlocal", action="store_true", help="Calculate the probability for helping given a text"
                                                                  " using a local model.")
-    arguments = parser.parse_args()
+    parser.add_argument("--modelDirectory", type=str, help="Directory where to load/store the "
+                                                           "type estimator model.")
+    arguments: Namespace = parser.parse_args()
+
     if arguments.train:
         start_training(arguments.train_csv, arguments.test_csv)
     elif arguments.trainlocal:
         start_training(arguments.train_csv, arguments.test_csv)
     elif arguments.pred:
-        obtain_probabilities(arguments.input_text, local=False)
+        obtain_probabilities(arguments.input_text, local=False, output_directory=arguments.modelDirectory)
     elif arguments.predlocal:
-        obtain_probabilities(arguments.input_text, local=True)
+        obtain_probabilities(arguments.input_text, local=True, output_directory=arguments.modelDirectory)
 
 
 if __name__ == "__main__":
