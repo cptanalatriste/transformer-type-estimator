@@ -1,12 +1,14 @@
 import logging
 import pickle
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
 from transformer_analyser import TransformerTypeAnalyser
 
@@ -67,11 +69,11 @@ def filter_out_of_domain(predicted_probabilities, true_probabilities) -> np.ndar
 def plot_reliability_diagram(true_labels: List[int], positive_probabilities: List[float], number_of_bins: int):
     bin_true_probabilities, bin_predicted_probabilities = calibration_curve(true_labels, positive_probabilities,
                                                                             n_bins=number_of_bins)
-    expected_calibration_error: float = calculate_ece_from_calibration_curve(bin_true_probabilities,
-                                                                             bin_predicted_probabilities,
-                                                                             positive_probabilities)
+    error_value: float = expected_calibration_error(bin_true_probabilities,
+                                                    bin_predicted_probabilities,
+                                                    positive_probabilities)
     logging.info(
-        f"Expected Calibration Error {expected_calibration_error}")
+        f"Expected Calibration Error {error_value}")
     plt.hist(positive_probabilities,
              weights=np.ones_like(positive_probabilities) / len(positive_probabilities),
              alpha=.4, bins=np.maximum(10, number_of_bins))
@@ -85,8 +87,8 @@ def plot_reliability_diagram(true_labels: List[int], positive_probabilities: Lis
     plt.show()
 
 
-def calculate_ece_from_calibration_curve(bin_true_probability: np.ndarray, bin_predicted_probability: np.ndarray,
-                                         person_type_probabilities: np.ndarray) -> float:
+def expected_calibration_error(bin_true_probability: np.ndarray, bin_predicted_probability: np.ndarray,
+                               person_type_probabilities: np.ndarray) -> float:
     number_of_bins: int = len(bin_true_probability)
     histogram = np.histogram(a=person_type_probabilities, range=(0, 1), bins=number_of_bins)
     bin_sizes = histogram[0]
@@ -101,3 +103,18 @@ def calculate_ece_from_calibration_curve(bin_true_probability: np.ndarray, bin_p
         result += current_bin_size / total_samples * np.abs(true_probability - predicted_probability)
 
     return result
+
+
+def evaluate_type_analyser(types_in_data: List[int],
+                           type_probabilities: List[float],
+                           number_of_bins) -> pd.DataFrame:
+    metrics: Dict[str, float] = {"brier_score_loss": brier_score_loss(types_in_data, type_probabilities),
+                                 "log_loss": log_loss(types_in_data, type_probabilities),
+                                 "roc_auc_score": roc_auc_score(types_in_data, type_probabilities)}
+
+    bin_true_probabilities, bin_predicted_probabilities = calibration_curve(types_in_data, type_probabilities,
+                                                                            n_bins=number_of_bins)
+    metrics["expected_calibration_error"] = expected_calibration_error(bin_true_probabilities,
+                                                                       bin_predicted_probabilities,
+                                                                       type_probabilities)
+    return pd.DataFrame(metrics.values(), index=metrics.keys())
