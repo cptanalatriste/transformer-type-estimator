@@ -10,7 +10,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
-from transformer_analyser import TransformerTypeAnalyser
+from base_analyser import TransformerTypeAnalyser
 
 
 class CalibratedTypeEstimator:
